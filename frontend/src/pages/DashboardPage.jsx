@@ -9,41 +9,48 @@ function DashboardPage({ size }) {
   const isMobile = size === 'mobile'
   const [messages, setMessages] = useState([])
   const [inputValue, setInputValue] = useState('')
-  const [isAtLatest, setIsAtLatest] = useState(true)
+  const [isFollowing, setIsFollowing] = useState(true)
   const listRef = useRef(null)
-  const latestRef = useRef(null)
+  const latestUserRef = useRef(null)
 
-  // Group messages into [userMsg, assistantMsg] pairs
-  const pairs = []
-  for (let i = 0; i < messages.length; i += 2) {
-    pairs.push(messages.slice(i, i + 2))
+  // Index of the last user message
+  const lastUserIdx = messages.reduce((acc, m, i) => (m.role === 'user' ? i : acc), -1)
+
+  // Scroll latest user message to top of container with a viewport-relative offset
+  const scrollToUser = () => {
+    const el = listRef.current
+    const target = latestUserRef.current
+    if (!el || !target) return
+    const offset = Math.min(25, Math.max(70, window.innerHeight * 0.25))
+    el.scrollTo({ top: target.offsetTop - offset, behavior: 'smooth' })
   }
 
-  // Scroll latest pair into view on new message
   useEffect(() => {
-    if (!latestRef.current) return
-    latestRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [pairs.length])
+    if (!isFollowing) return
+    scrollToUser()
+  }, [messages])
 
   const handleScroll = () => {
     const el = listRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setIsAtLatest(distanceFromBottom <= 48)
+    setIsFollowing(distanceFromBottom <= 48)
   }
 
   const scrollToLatest = () => {
-    latestRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToUser()
+    setIsFollowing(true)
   }
 
   const handleSubmit = () => {
     const trimmedValue = inputValue.trim()
     if (!trimmedValue) return
     const timestamp = Date.now()
+    setIsFollowing(true)
     setMessages((prevMessages) => [
       ...prevMessages,
       { id: `${timestamp}-user`, role: 'user', text: trimmedValue },
-      { id: `${timestamp}-assistant`, role: 'assistant', text: 'Thanks! I can help with that. What should we tackle first?' },
+      { id: `${timestamp}-assistant`, role: 'assistant', text: "Thanks! I can help with that. What should we tackle first?" },
     ])
     setInputValue('')
   }
@@ -54,58 +61,52 @@ function DashboardPage({ size }) {
         ref={listRef}
         onScroll={handleScroll}
         className="min-h-0 flex-1 overflow-y-auto"
-        style={{ scrollSnapType: 'y mandatory' }}
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center px-4">
             <ChatBody variant="landing" size={size} />
           </div>
         ) : (
-          // Oldest pair first — each takes full screen height — scroll UP to see previous
-          pairs.map((pair, index) => {
-            const isLatest = index === pairs.length - 1
-            return (
-              <div
-                key={pair[0].id}
-                ref={isLatest ? latestRef : null}
-                className="flex flex-col px-4 py-6 overflow-y-auto"
-                style={{ scrollSnapAlign: 'start', height: listRef.current?.clientHeight ?? '100svh' }}
-              >
-                <div className="mx-auto w-full max-w-2xl space-y-8">
-                  {pair.map((message) => (
-                    <div key={message.id}>
-                      {message.role === 'user' ? (
-                        <div className="flex justify-end">
-                          <div className="max-w-[72%] rounded-2xl bg-slate-100 px-5 py-3 text-sm leading-6 text-slate-800">
-                            {message.text}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 shrink-0 text-teal-500">
-                            <RiSparklingFill className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm leading-7 text-slate-800">{message.text}</p>
-                            <div className="mt-3 flex items-center gap-3 text-slate-400">
-                              <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiThumbsUp className="h-4 w-4" /></button>
-                              <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiThumbsDown className="h-4 w-4" /></button>
-                              <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiRefreshCw className="h-4 w-4" /></button>
-                              <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiCopy className="h-4 w-4" /></button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+          <div className="mx-auto w-full max-w-2xl px-4 py-6 space-y-6">
+            {messages.map((message, index) => {
+              const isLastUser = message.role === 'user' && index === lastUserIdx
+              const isLastMsg = index === messages.length - 1
+              return (
+                <div
+                  key={message.id}
+                  ref={isLastUser ? latestUserRef : null}
+                  style={isLastMsg && message.role === 'assistant' ? { minHeight: 'calc(100svh - 200px)' } : {}}
+                >
+                  {message.role === 'user' ? (
+                    <div className="flex justify-end">
+                      <div className="max-w-[72%] rounded-2xl bg-slate-100 px-5 py-3 text-sm leading-6 text-slate-800">
+                        {message.text}
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 shrink-0 text-teal-500">
+                        <RiSparklingFill className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm leading-7 text-slate-800">{message.text}</p>
+                        <div className="mt-3 flex items-center gap-3 text-slate-400">
+                          <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiThumbsUp className="h-4 w-4" /></button>
+                          <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiThumbsDown className="h-4 w-4" /></button>
+                          <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiRefreshCw className="h-4 w-4" /></button>
+                          <button className="rounded p-1 hover:bg-slate-100 hover:text-slate-600"><FiCopy className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )
-          })
+              )
+            })}
+          </div>
         )}
       </div>
 
-      {messages.length > 0 && !isAtLatest ? (
+      {messages.length > 0 && !isFollowing ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center">
           <button
             type="button"
